@@ -17,7 +17,6 @@ omit =
     data/cache.py
     database/schemas.py
     database/session.py
-    data/historical.py
 [report]
 exclude_lines =
     pragma: no cover
