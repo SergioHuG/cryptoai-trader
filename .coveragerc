@@ -12,14 +12,15 @@ omit =
     execution/live.py
     backtest/*
     notifications/*
-    database/*
     dashboard/*
     data/feeds.py
-    data/historical.py
     data/cache.py
-
+    database/schemas.py
+    database/session.py
+    data/historical.py
 [report]
 exclude_lines =
     pragma: no cover
     def __repr__
     raise NotImplementedError
+    if __name__ == .__main__.:
