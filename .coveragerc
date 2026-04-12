@@ -4,7 +4,6 @@ omit =
     scripts/*
     */migrations/*
     api/main.py
-    agents/coordinator.py
     agents/sentiment.py
     agents/fundamental.py
     execution/paper.py
