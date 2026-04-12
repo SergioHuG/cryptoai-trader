@@ -1,10 +1,10 @@
 [tool.poetry]
+package-mode = false
 name = "cryptoai-trader"
 version = "0.1.0"
 description = "AI-driven cryptocurrency trading system with human-in-the-loop approval"
 authors = ["Your Name <your@email.com>"]
 readme = "README.md"
-packages = [{include = "cryptoai_trader"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
@@ -38,7 +38,7 @@ pre-commit = "^3.7.0"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "--cov=. --cov-report=term-missing --cov-fail-under=80"
+addopts = "--cov=. --cov-report=term-missing --cov-fail-under=80 --cov-config=.coveragerc"
 
 [tool.ruff]
 line-length = 88

@@ -1,0 +1,25 @@
+[run]
+omit =
+    tests/*
+    scripts/*
+    */migrations/*
+    api/main.py
+    agents/coordinator.py
+    agents/technical.py
+    agents/sentiment.py
+    agents/fundamental.py
+    execution/paper.py
+    execution/live.py
+    backtest/*
+    notifications/*
+    database/*
+    dashboard/*
+    data/feeds.py
+    data/historical.py
+    data/cache.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise NotImplementedError
