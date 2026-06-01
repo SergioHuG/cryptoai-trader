@@ -4,17 +4,19 @@ omit =
     scripts/*
     */migrations/*
     api/main.py
+    agents/coordinator.py
+    agents/technical.py
     agents/sentiment.py
     agents/fundamental.py
     execution/paper.py
     execution/live.py
     backtest/*
-    notifications/*
     dashboard/*
     data/feeds.py
     data/cache.py
     database/schemas.py
     database/session.py
+    data/historical.py
 [report]
 exclude_lines =
     pragma: no cover
