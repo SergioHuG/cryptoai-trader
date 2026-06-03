@@ -10,7 +10,7 @@ from decimal import Decimal
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    Column, String, Numeric, DateTime, Integer,
+    Boolean, Column, String, Numeric, DateTime, Integer,
     UniqueConstraint, Index, create_engine
 )
 from sqlalchemy.orm import DeclarativeBase, Session
@@ -174,3 +174,81 @@ class DailyPerformanceModel(Base):
 
     def __repr__(self) -> str:
         return f"<DailyPerformance {self.date} {self.mode} pnl={self.daily_pnl_pct}>"
+
+
+# ── Reviewer Sessions ─────────────────────────────────────────────────────────
+
+class ReviewerSessionModel(Base):
+    """
+    Per-decision metadata for the HITL approval gate.
+    Records every human decision (approve / cancel / timeout) along with
+    timing, override classification, and deviation metrics.
+    Append-only — never update or delete rows.
+    """
+    __tablename__ = "reviewer_sessions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    signal_id = Column(Integer, nullable=False)           # references signals.id
+    symbol = Column(String(20), nullable=False)
+    direction = Column(String(10), nullable=False)        # long | short
+    confidence = Column(Numeric(precision=6, scale=4), nullable=False)
+    recommended_size = Column(Numeric(precision=20, scale=8), nullable=False)
+    sent_at = Column(DateTime(timezone=True), nullable=False)
+    decided_at = Column(DateTime(timezone=True), nullable=True)
+    decision = Column(String(10), nullable=False)         # approve | cancel | timeout
+    decision_latency_seconds = Column(Numeric(precision=8, scale=3), nullable=True)
+    hour_of_day = Column(Integer, nullable=False)         # 0–23 UTC
+    is_override = Column(Boolean, nullable=False, default=False)
+    # Snapshot metrics at decision time:
+    historical_override_rate = Column(Numeric(precision=5, scale=4), nullable=True)
+    deviation_z_score = Column(Numeric(precision=6, scale=3), nullable=True)
+    escalation_flag = Column(Boolean, nullable=False, default=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        Index("ix_reviewer_sessions_decided_at", "decided_at"),
+        Index("ix_reviewer_sessions_signal_id", "signal_id"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<ReviewerSession signal={self.signal_id} decision={self.decision}>"
+
+
+# ── Discretionary Signals ─────────────────────────────────────────────────────
+
+class DiscretionarySignalModel(Base):
+    """
+    Human-sourced directional trade ideas submitted by the portfolio manager.
+    Fed into the meta-labeling layer (Phase 3) as additional features.
+    provenance is always 'human' — distinguishes from model-sourced inputs.
+    """
+    __tablename__ = "discretionary_signals"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    signal_ref = Column(String(36), nullable=False, unique=True)  # UUID string
+    symbol = Column(String(20), nullable=False)
+    direction = Column(String(10), nullable=False)        # long | short
+    conviction = Column(Numeric(precision=4, scale=3), nullable=False)
+    provenance = Column(String(10), nullable=False, default="human")
+    submitted_at = Column(DateTime(timezone=True), nullable=False)
+    meta_label_consumed = Column(Boolean, nullable=False, default=False)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        Index("ix_discretionary_signals_consumed", "meta_label_consumed"),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<DiscretionarySignal {self.symbol} {self.direction} "
+            f"conviction={self.conviction} consumed={self.meta_label_consumed}>"
+        )
