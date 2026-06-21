@@ -183,3 +183,84 @@ def _apply_pt_sl_on_t1(
         },
         index=events.index,
     )
+
+
+def get_events(
+    close: pd.Series,
+    t_events: pd.DatetimeIndex,
+    pt_sl: tuple[float, float],
+    trgt: pd.Series,
+    max_hp: int,
+    min_ret: float = 0.0,
+    side: pd.Series | None = None,
+) -> pd.DataFrame:
+    """Assemble triple-barrier events (AFML Snippet 3.3).
+
+    Aligns the per-bar target ``trgt`` to ``t_events``, drops events whose
+    target is undefined or below ``min_ret``, attaches the bars-forward
+    vertical barrier, runs the close-only first-touch path-walk, and returns
+    an events frame whose ``t1`` is the *realized* first-touch timestamp.
+
+    Symmetric vs meta-labeling:
+      * ``side is None`` -> symmetric. A synthetic ``side = 1`` drives the
+        (orientation-invariant) path-walk, and the ``side`` column is dropped
+        from the result, exactly as AFML does.
+      * ``side`` given    -> meta-labeling. Returns oriented by ``side``, and
+        the ``side`` column is retained for :func:`get_bins`.
+
+    Parameters
+    ----------
+    close:
+        Bar close prices, UTC ``DatetimeIndex``, ascending.
+    t_events:
+        Event timestamps (typically :func:`cusum_filter` output).
+    pt_sl:
+        ``(pt_mult, sl_mult)`` multipliers applied to ``trgt``.
+    trgt:
+        Per-bar unit target (e.g. ``ewma_vol``), indexed like ``close``.
+    max_hp:
+        Vertical horizon in bars (>= 1).
+    min_ret:
+        Minimum target to keep an event; the filter is AFML-strict
+        (``trgt > min_ret``), which also drops ``NaN`` targets.
+    side:
+        Optional per-event bet side (``1``/``-1``) for meta-labeling.
+
+    Returns
+    -------
+    pd.DataFrame
+        Indexed by surviving event-start timestamps, with columns:
+          * ``t1``      -- realized first-touch timestamp (``NaT`` if an event
+            is still unresolved at the end of the data).
+          * ``trgt``    -- the (filtered) per-event target, ``float64``.
+          * ``barrier`` -- nullable ``Int8`` :class:`Barrier` value
+            (``<NA>`` for unresolved events).
+          * ``side``    -- ``int8`` bet side; present only in meta-labeling.
+
+        Unresolved events are retained here; :func:`get_bins` drops them.
+    """
+    trgt = trgt.reindex(pd.DatetimeIndex(t_events))
+    trgt = trgt[trgt > min_ret]  # AFML-strict; also drops NaN targets
+    event_index = trgt.index
+
+    if side is None:
+        side_ = pd.Series(1, index=event_index, dtype="int8")
+        keep_side = False
+    else:
+        side_ = side.reindex(event_index).astype("int8")
+        keep_side = True
+
+    t1 = _vertical_barrier(close.index, event_index, max_hp)
+    events_ = pd.DataFrame(
+        {"t1": t1, "trgt": trgt, "side": side_}, index=event_index
+    )
+
+    touched = _apply_pt_sl_on_t1(close, events_, pt_sl)
+
+    out = pd.DataFrame(index=event_index)
+    out["t1"] = touched["t1"]
+    out["trgt"] = trgt
+    out["barrier"] = touched["barrier"]
+    if keep_side:
+        out["side"] = side_
+    return out
