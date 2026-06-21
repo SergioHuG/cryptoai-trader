@@ -78,3 +78,108 @@ def _vertical_barrier(
     t1 = pd.Series(index[clipped], index=t_events, name="t1")
     t1[target >= n] = pd.NaT
     return t1
+
+
+def _apply_pt_sl_on_t1(
+    close: pd.Series,
+    events: pd.DataFrame,
+    pt_sl: tuple[float, float],
+) -> pd.DataFrame:
+    """First-touch path-walk over the triple barrier (AFML Snippet 3.2).
+
+    For each event, walks the *simple-return* path from the event start to its
+    vertical barrier ``t1`` (or to the last available bar when ``t1`` is
+    ``NaT``), oriented by ``side``, and records which barrier was touched
+    first. Touch detection is **close-only** (Decision Q2); the OHLC high/low
+    variant is deferred to a Phase-2 ADR.
+
+    Conventions (locked):
+      * Returns are oriented: ``r = (close[loc:end] / close[loc] - 1) * side``,
+        so ``UPPER`` is always the profit-take side and ``LOWER`` the
+        stop-loss side, for both long and short.
+      * Thresholds are ``pt = pt_mult * trgt`` and ``sl = -sl_mult * trgt``;
+        a non-positive multiplier disables that horizontal barrier.
+      * Touch uses AFML's strict inequalities (``r > pt`` / ``r < sl``); a
+        return landing exactly on a threshold is *not* a touch.
+      * Horizontal-wins-on-the-vertical-bar (Decision Q4): if the earliest
+        horizontal touch lands on or before the vertical bar, the horizontal
+        barrier is recorded, never ``VERTICAL``.
+      * Same-bar PT+SL collision cannot occur under close-only (a single
+        close return is either ``> pt > 0`` or ``< sl < 0``, never both).
+
+    Parameters
+    ----------
+    close:
+        Bar close prices, UTC ``DatetimeIndex``, ascending.
+    events:
+        Indexed by event-start timestamps, with columns ``t1`` (vertical
+        barrier, ``NaT``-able), ``trgt`` (per-event unit target), and ``side``
+        (``1`` long / ``-1`` short; ``get_events`` defaults it to ``1``).
+    pt_sl:
+        ``(pt_mult, sl_mult)`` multipliers applied to ``trgt``.
+
+    Returns
+    -------
+    pd.DataFrame
+        Indexed by ``events.index`` with columns:
+          * ``t1``      -- realized first-touch timestamp (earliest of the
+            profit-take, stop-loss, and vertical barriers); ``NaT`` when an
+            event is unresolved (``NaT`` vertical and no horizontal touch
+            before the data ends).
+          * ``barrier`` -- nullable ``Int8`` :class:`Barrier` value;
+            ``<NA>`` for unresolved events. Downstream (:func:`get_bins`)
+            drops ``NaT``-``t1`` rows and casts to plain ``int8``.
+    """
+    pt_mult, sl_mult = pt_sl
+    last_ts = close.index[-1] if len(close) else None
+
+    out_t1: list = []
+    out_barrier: list = []
+
+    for loc in events.index:
+        t1_v = events.at[loc, "t1"]
+        trgt = events.at[loc, "trgt"]
+        side = events.at[loc, "side"]
+
+        end = t1_v if pd.notna(t1_v) else last_ts
+        path = close.loc[loc:end]
+        ret = (path / close.loc[loc] - 1.0) * side
+
+        pt = pt_mult * trgt
+        sl = -sl_mult * trgt
+        pt_ts = ret.index[ret > pt].min() if pt_mult > 0 else pd.NaT
+        sl_ts = ret.index[ret < sl].min() if sl_mult > 0 else pd.NaT
+
+        # Earliest horizontal touch (and which one).
+        horizontals = [
+            (ts, barrier)
+            for ts, barrier in ((pt_ts, Barrier.UPPER), (sl_ts, Barrier.LOWER))
+            if pd.notna(ts)
+        ]
+        h_ts, h_barrier = (
+            min(horizontals, key=lambda pair: pair[0])
+            if horizontals
+            else (pd.NaT, None)
+        )
+
+        if pd.notna(h_ts) and (pd.isna(t1_v) or h_ts <= t1_v):
+            out_t1.append(h_ts)
+            out_barrier.append(int(h_barrier))
+        elif pd.notna(t1_v):
+            out_t1.append(t1_v)
+            out_barrier.append(int(Barrier.VERTICAL))
+        else:
+            out_t1.append(pd.NaT)
+            out_barrier.append(pd.NA)
+
+    return pd.DataFrame(
+        {
+            "t1": pd.Series(
+                pd.to_datetime(out_t1, utc=True),
+                index=events.index,
+                name="t1",
+            ),
+            "barrier": pd.array(out_barrier, dtype="Int8"),
+        },
+        index=events.index,
+    )
