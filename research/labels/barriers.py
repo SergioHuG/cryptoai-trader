@@ -264,3 +264,60 @@ def get_events(
     if keep_side:
         out["side"] = side_
     return out
+
+
+def get_bins(events: pd.DataFrame, close: pd.Series) -> pd.DataFrame:
+    """Compute labels from triple-barrier events (AFML Snippet 3.5).
+
+    Drops unresolved events (``t1`` is ``NaT``) -- these have no realized
+    outcome yet and cannot be labeled. For the remainder, computes the
+    *simple* return from each event's start to its realized ``t1``, then:
+
+      * Symmetric (no ``side`` column on ``events``): ``bin = sign(ret)``,
+        i.e. ``{-1, 0, 1}``.
+      * Meta-labeling (``side`` present): ``ret`` is oriented by ``side``
+        first, then ``bin = sign(ret)`` with every non-positive outcome
+        collapsed to ``0`` -- AFML's exact rule, so a losing bet (``ret<0``)
+        and a flat one (``ret==0``) are both "the side called it wrong",
+        landing in ``{0, 1}``.
+
+    Parameters
+    ----------
+    events:
+        Output of :func:`get_events` -- indexed by event-start timestamp,
+        with ``t1`` (``NaT``-able), ``trgt``, ``barrier`` (nullable ``Int8``),
+        and optionally ``side``.
+    close:
+        Bar close prices, UTC ``DatetimeIndex``, ascending.
+
+    Returns
+    -------
+    pd.DataFrame
+        Indexed by surviving event-start timestamps, columns ``ret``
+        (``float64``), ``bin`` (``int8``), ``t1`` (tz-aware ``datetime64``),
+        ``barrier`` (plain ``int8`` -- the ``NaT``/``<NA>`` pairing in
+        :func:`get_events` means no nulls survive the drop), and ``side``
+        (``int8``) only in the meta-labeling path.
+    """
+    resolved = events.dropna(subset=["t1"])
+    has_side = "side" in resolved.columns
+
+    px_start = close.reindex(resolved.index).to_numpy(dtype="float64")
+    px_t1 = close.reindex(resolved["t1"]).to_numpy(dtype="float64")
+    ret = px_t1 / px_start - 1.0
+
+    if has_side:
+        ret = ret * resolved["side"].to_numpy(dtype="float64")
+
+    bin_ = np.sign(ret).astype("int8")
+    if has_side:
+        bin_ = np.where(ret <= 0, 0, bin_).astype("int8")
+
+    out = pd.DataFrame(index=resolved.index)
+    out["ret"] = ret.astype("float64")
+    out["bin"] = bin_
+    out["t1"] = resolved["t1"]
+    out["barrier"] = resolved["barrier"].astype("int8")
+    if has_side:
+        out["side"] = resolved["side"].astype("int8")
+    return out
