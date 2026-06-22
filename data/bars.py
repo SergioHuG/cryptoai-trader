@@ -31,6 +31,9 @@ from typing import Any, Callable
 
 import pandas as pd
 
+from data.hdf5_keys import symbol_to_key as _symbol_to_key
+from data.hdf5_keys import threshold_to_key as _threshold_to_key
+
 __all__ = [
     "Bar",
     "DollarBarAccumulator",
@@ -91,29 +94,11 @@ class Bar:
 # ---------------------------------------------------------------------------
 # Key helpers
 # ---------------------------------------------------------------------------
-
-def _symbol_to_key(symbol: str) -> str:
-    """Normalise a CCXT symbol string to an HDF5-safe group name.
-
-    Examples
-    --------
-    'BTC/USD' → 'BTC_USD'
-    'btc/usd' → 'BTC_USD'
-    """
-    return symbol.replace("/", "_").upper()
-
-
-def _threshold_to_key(threshold: Decimal) -> str:
-    """Normalise a Decimal threshold to an HDF5-safe group name.
-
-    HDF5 group names cannot start with a digit, so we prefix 'thr_'.
-
-    Examples
-    --------
-    Decimal('1000000')    → 'thr_1000000'
-    Decimal('500000.99')  → 'thr_500000'  (int-truncated)
-    """
-    return f"thr_{int(threshold)}"
+# _symbol_to_key/_threshold_to_key are extracted into the shared, public
+# data/hdf5_keys.py (labels live in the same .h5 file as bars, as a sibling
+# group, so the normalizer must be a single source of truth). Aliased back
+# in via the top-of-file import so this module's behavior and existing
+# tests stay untouched.
 
 
 def _hdf5_key(symbol: str, threshold: Decimal) -> str:
