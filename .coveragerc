@@ -10,7 +10,6 @@ omit =
     agents/fundamental.py
     execution/paper.py
     execution/live.py
-    backtest/*
     dashboard/*
     data/feeds.py
     data/cache.py
