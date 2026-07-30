@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Pre-push self-verification gate (DEC-16 / PROTOCOL.md §7).
+#
+# Deter-not-prevent by design: bypassable via `git push --no-verify`. The
+# required phase-gate CI check at PR-to-main (§7) is the actual un-forgeable
+# wall; this hook exists to catch honest mistakes before they leave the
+# machine, and to produce RUN-REPORT.md (commit 3) so the phone-tier
+# reviewer has git facts to read instead of re-deriving them.
+#
+# Install (one-time, per clone):
+#   git config core.hooksPath scripts/hooks
+#
+# git invokes this hook with one line per ref being pushed, on stdin:
+#   <local ref> <local sha1> <remote ref> <remote sha1>
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+HELPER="$REPO_ROOT/scripts/hooks/lib/verify_manifest.py"
+ZERO_SHA="0000000000000000000000000000000000000000"
+
+status=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    # Branch deletion — nothing to verify.
+    if [[ "$local_sha" == "$ZERO_SHA" ]]; then
+        continue
+    fi
+
+    branch_name="${local_ref#refs/heads/}"
+
+    # New branch, not yet on remote: remote_sha is all-zero. Verify from the
+    # merge-base with main instead, so the whole task history gets checked
+    # on first push, not just "since some prior push that doesn't exist yet."
+    if [[ "$remote_sha" == "$ZERO_SHA" ]]; then
+        range_base="$(git merge-base origin/main "$local_sha" 2>/dev/null || echo "$remote_sha")"
+    else
+        range_base="$remote_sha"
+    fi
+
+    if ! python3 "$HELPER" \
+        --repo-root "$REPO_ROOT" \
+        --branch "$branch_name" \
+        --range-base "$range_base" \
+        --range-head "$local_sha"
+    then
+        status=1
+        break
+    fi
+done
+
+exit "$status"
