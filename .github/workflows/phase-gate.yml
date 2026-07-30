@@ -58,14 +58,9 @@ jobs:
         run: bash scripts/test.sh
 
       - name: Evaluate phase gate (per-task floor + global non-regression ratchet)
-        # --allow-base-missing is a ONE-TIME bootstrapping flag: this very PR is what
-        # introduces --cov/--junit-xml to scripts/test.sh, so feature/phase2-backtest
-        # doesn't have coverage.json/report.xml yet. REMOVE this flag once the base
-        # branch has run the instrumented test.sh at least once (i.e. after this PR
-        # merges) — otherwise the ratchet check silently no-ops forever.
         run: |
           python3 pr/.github/scripts/phase_gate_check.py \
             --pr-dir pr \
             --base-dir base \
-            --branch "${{ github.head_ref }}" \
-            --allow-base-missing
+            --branch "${{ github.head_ref }}" 
+            
