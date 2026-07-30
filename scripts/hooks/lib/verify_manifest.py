@@ -84,16 +84,31 @@ def is_run_report_commit(commit: CommitInfo, task_id: str) -> bool:
     return commit.files_changed == [expected]
 
 
+def is_spec_only_commit(commit: CommitInfo, task_id: str) -> bool:
+    expected = f"docs/agent/specs/{task_id}.md"
+    return commit.files_changed == [expected]
+
+
 def classify_commits(
     commits: list[CommitInfo], task_id: str
 ) -> tuple[CommitInfo, CommitInfo, CommitInfo | None]:
+    # DEC-3 requires the spec to already be committed before the agent's
+    # tests/impl work begins. On a brand-new task branch's first-ever push,
+    # everything new since the merge-base is in range — including that spec
+    # commit — so it legitimately sits ahead of the tests/impl/report triad
+    # rather than being a violation. Strip at most one such leading commit
+    # before applying the shape check to what remains.
+    if commits and is_spec_only_commit(commits[0], task_id):
+        commits = commits[1:]
+
     if len(commits) == 3 and is_run_report_commit(commits[2], task_id):
         return commits[0], commits[1], commits[2]
     if len(commits) == 2:
         return commits[0], commits[1], None
     raise Violation(
         f"Expected exactly 2 unreported commits (tests, impl) or 3 already-reported "
-        f"(tests, impl, report) in the pushed range; found {len(commits)}. Per "
+        f"(tests, impl, report) in the pushed range — optionally preceded by exactly "
+        f"one spec-only commit (docs/agent/specs/{task_id}.md); found {len(commits)}. Per "
         f"PROTOCOL.md §4: one task = tests-commit + impl-commit + report-commit, "
         f"nothing else in the pushed range."
     )
