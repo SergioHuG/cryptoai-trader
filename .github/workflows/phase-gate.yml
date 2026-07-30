@@ -1,0 +1,71 @@
+name: Phase Gate
+
+# Required status check at PR-to-<integration-branch> (PROTOCOL.md §7 / DEC-16).
+# This is the un-forgeable wall: coverage and test-count numbers here come
+# from two fresh Docker re-runs (PR branch + integration branch), never from
+# a stored/committed baseline file — nothing this check depends on is
+# something the builder agent's PAT could touch, even indirectly.
+# Agent-immutability of this file itself is enforced separately, via the
+# PAT's missing `workflow` scope (§7) and via GitHub branch-protection
+# making this check required.
+#
+# INTEGRATION BRANCH NOTE (2026-07-27): main lags feature/phase2-backtest
+# intentionally — Branch 2 development is still active there and hasn't
+# merged to main yet. This workflow therefore targets
+# feature/phase2-backtest, NOT main, until Branch 2 completes and merges.
+# GitHub Actions' `on.pull_request.branches` trigger does not support
+# expressions, so this branch name has to be a literal below — when Branch 2
+# finishes, update BOTH the trigger and the "Checkout base branch" step's
+# `ref:` to `main`, and re-point main's branch protection accordingly
+# (see PROTOCOL.md §9, "Deferred action — integration branch retarget").
+
+on:
+  pull_request:
+    branches: [feature/phase2-backtest]  # UPDATE TO [main] once Branch 2 merges
+    types: [opened, synchronize, reopened]
+
+jobs:
+  phase-gate:
+    name: Phase Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          path: pr
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Checkout base branch (currently feature/phase2-backtest — see note above)
+        uses: actions/checkout@v4
+        with:
+          path: base
+          ref: feature/phase2-backtest  # UPDATE TO main once Branch 2 merges
+
+      - name: Set up Python (for the checker script only — not the project's own tests, which run inside scripts/test.sh's Docker container)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install checker script dependencies
+        run: pip install pyyaml
+
+      - name: Run test suite on PR branch (Docker — authoritative, per CLAUDE.md)
+        working-directory: pr
+        run: bash scripts/test.sh
+
+      - name: Run test suite on base branch (Docker — authoritative, per CLAUDE.md)
+        working-directory: base
+        run: bash scripts/test.sh
+
+      - name: Evaluate phase gate (per-task floor + global non-regression ratchet)
+        # --allow-base-missing is a ONE-TIME bootstrapping flag: this very PR is what
+        # introduces --cov/--junit-xml to scripts/test.sh, so feature/phase2-backtest
+        # doesn't have coverage.json/report.xml yet. REMOVE this flag once the base
+        # branch has run the instrumented test.sh at least once (i.e. after this PR
+        # merges) — otherwise the ratchet check silently no-ops forever.
+        run: |
+          python3 pr/.github/scripts/phase_gate_check.py \
+            --pr-dir pr \
+            --base-dir base \
+            --branch "${{ github.head_ref }}" \
+            --allow-base-missing
