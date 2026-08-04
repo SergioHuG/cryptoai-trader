@@ -60,7 +60,11 @@ class TrialRecord:
             raise ValueError("TrialRecord.trial_id must be non-empty.")
         if not self.config_hash:
             raise ValueError("TrialRecord.config_hash must be non-empty.")
-        object.__setattr__(self, "created_at", pd.Timestamp(self.created_at))
+        # str(...) first: pytables round-trips string attrs as numpy.str_,
+        # which pd.Timestamp's constructor rejects even though it behaves
+        # like a plain str -- normalizing through str() handles that plus
+        # datetime/Timestamp/ISO-string inputs uniformly.
+        object.__setattr__(self, "created_at", pd.Timestamp(str(self.created_at)))
         if self.mode not in _VALID_MODES:
             raise ValueError(
                 f"TrialRecord.mode must be one of {sorted(_VALID_MODES)!r}, "
