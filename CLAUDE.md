@@ -6,9 +6,12 @@ The human (final approver) reviews every trade signal before execution.
 Claude Code is a development partner — not an autonomous decision maker.
 
 ## Current Phase
-**PHASE 0 — Repository Foundation & Data Pipeline**
-Progress: Setting up repository structure, dependencies, and Kraken data connection.
-Next: Backtesting engine → Paper trading → Live execution (Phase 3 only)
+**Phase 2 — Backtest build.**
+The AFML statistical strategy-evaluation layer (`backtest/`) is under active construction.
+("Phase 2" here = "Branch 2" in PROTOCOL.md = git branch `feature/phase2-backtest` — one stream, three names.)
+Module design and contracts live in `backtest/CLAUDE.md`; the governing build protocol is
+`docs/agent/PROTOCOL.md`. Live task and branch status lives in Notion, not in this file.
+Ladder ahead: Backtest → Paper → Live.
 
 ---
 
@@ -56,9 +59,11 @@ SIGNAL_TIMEOUT_SECONDS = 90         # Auto-cancel if no human response
 
 ## Trading Parameters
 - **Exchange:** Kraken Pro (via CCXT library)
-- **Assets Phase 1:** BTC/USD, ETH/USD
-- **Timeframe:** 15-minute candles (intraday)
-- **Strategy:** EMA 9/21 crossover + RSI confirmation + volume filter, 1:2 R/R
+- **Assets:** BTC/USD, ETH/USD
+- **Timeframe:** 15-minute candles for live signals (intraday); 1-hour for historical backtest (ADR-003)
+- **Backtest layer:** scores per-event bet returns, not candles — it does **not** replay this
+  strategy candle-by-candle (EMA-replay design retired, ADR-029). See `backtest/CLAUDE.md`.
+- **Strategy (live signals):** EMA 9/21 crossover + RSI confirmation + volume filter, 1:2 R/R
 - **Default mode:** Paper trading — live requires explicit `--live` flag
 
 ---
@@ -93,7 +98,7 @@ SIGNAL_TIMEOUT_SECONDS = 90         # Auto-cancel if no human response
 - All database changes go through Alembic migrations, never raw schema edits
 
 ### Architecture Rules
-- `execution/live.py` is OFF LIMITS — file stays empty until Phase 3
+- `execution/live.py` is OFF LIMITS — file stays empty until the Live stage
 - Paper trading is always the default execution mode
 - All trade execution MUST pass through `agents/risk.py` gate first — no exceptions
 - Docker Compose is the only way to run the full stack locally
@@ -115,10 +120,11 @@ SIGNAL_TIMEOUT_SECONDS = 90         # Auto-cancel if no human response
 
 ---
 
-## Validation Phases
-- **Phase 1 (current):** Backtest on 6-12 months Kraken historical data
-- **Phase 2:** Paper trade 4 weeks minimum with full stack running
-- **Phase 3:** Live trading only after Phase 2 shows consistent positive expectancy
+## Validation Ladder
+The strategy advances through three stages, in order:
+- **Backtest** (current stage): statistical evaluation on 6–12 months of Kraken historical data
+- **Paper:** paper-trade 4 weeks minimum with the full stack running
+- **Live:** live trading only after Paper shows consistent positive expectancy
 
 ---
 
