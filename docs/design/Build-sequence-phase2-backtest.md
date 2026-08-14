@@ -2,6 +2,8 @@
 
 > **Purpose:** Full context carry-over for the next session. The `/grill-me` design-lock pass is **complete** (Q1–Q15, no code written). This document is the build-actionable contract + ordered TDD cadence. Read top-to-bottom before touching code.
 
+> **Addendum (2026-08-14) — engine.py task split & renumbering (DEC-2).** The single "Task 7 — `engine.py`" below was split into three specs per the design-time split-points rule (DEC-2): **task-07** (`_fit_predict_returns` + `run_walk_forward`), **task-08** (`run_cpcv`), and **task-09** (`run_synthetic` + gate assembly + ledger integration + the single-seam spy test). The original "Task 8 — `__init__.py`" is renumbered **task-10**. The contracts and numeric oracles in the Task 7 / Task 8 sections below remain authoritative for content; only their task numbers are superseded. `docs/agent/specs/` is the authoritative source for task ids.
+
 **Goal:** Build the AFML statistical strategy-evaluation layer — the overfitting gate the `Backtest → Paper Trade → Live` pipeline hinges on.
 
 **Architecture:** 8-module package. Return-path-centric, price/Decimal/seam-free. Three eval modes (Walk-Forward, CPCV, O-U Monte Carlo) → a dense `paths` matrix → pure statistical metrics (Sharpe-Lo, PSR, DSR, PBO, HHI, DD/TuW) → a persisted tri-state gate verdict. A persistent, hash-deduped trial ledger supplies the multiple-testing bookkeeping (DSR `N`/`V`, PBO matrix).
