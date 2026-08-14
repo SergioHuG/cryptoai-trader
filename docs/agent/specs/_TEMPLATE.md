@@ -15,7 +15,7 @@
 task_id: task-NN
 branch: feature/task-NN-slug
 module: src/path/to/module.py
-depends_on: []              # list of task_ids that must be merged to main first, e.g. [task-06]
+depends_on: []              # task_ids merged to the integration branch first — PROTOCOL.md §9: currently feature/phase2-backtest, not main. e.g. [task-06]
 
 test_manifest:
   # One entry per test file this task is allowed to create or modify.
